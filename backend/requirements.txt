@@ -1,0 +1,18 @@
+# Backend – PyTorch (ROCm), Transformers, FastAPI
+# Install ROCm-enabled PyTorch from AMD's index:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/rocm5.7
+
+torch==2.6.0
+torchvision==0.21.0
+transformers==4.48.0
+accelerate==0.30.1
+Pillow==12.2.0
+pdf2image==1.17.0
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.22
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+pydantic==2.7.1
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
