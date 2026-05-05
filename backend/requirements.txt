@@ -1,18 +1,54 @@
-# Backend – PyTorch (ROCm), Transformers, FastAPI
+# Backend – PyTorch (ROCm), Transformers, FastAPI, VLM Inference
+# ============================================================================
 # Install ROCm-enabled PyTorch from AMD's index:
 #   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/rocm5.7
+#
+# For production on AMD MI300X:
+#   ROCm 5.7+ required for bfloat16 support and device_map="auto"
+# ============================================================================
 
-torch==2.6.0
-torchvision==0.21.0
-transformers==4.48.0
-accelerate==0.30.1
-Pillow==12.2.0
-pdf2image==1.17.0
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-python-multipart==0.0.22
-sqlalchemy==2.0.30
-psycopg2-binary==2.9.9
-pydantic==2.7.1
-pydantic-settings==2.2.1
-python-dotenv==1.0.1
+# PyTorch & GPU Support (ROCm optimized)
+torch>=2.6.0
+torchvision>=0.21.0
+torchaudio>=2.6.0
+
+# Transformers & Vision Language Models
+transformers>=4.48.0
+accelerate>=0.30.1
+safetensors>=0.4.0
+
+# Image Processing
+Pillow>=10.0.0
+pdf2image>=1.17.0
+
+# Web Framework & API
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.22
+starlette>=0.38.0
+
+# Data Validation & Serialization
+pydantic>=2.0.0
+pydantic-settings>=2.2.0
+pydantic-core>=2.0.0
+
+# Database (PostgreSQL)
+sqlalchemy>=2.0.30
+psycopg2-binary>=2.9.0
+alembic>=1.13.0
+
+# Environment & Config
+python-dotenv>=1.0.1
+
+# Logging & Monitoring
+python-json-logger>=2.0.0
+
+# Optional: Qwen-specific dependencies (if required by model)
+# qwen-vl>=0.1.0
+
+# Optional: For Hugging Face model caching & auth
+huggingface-hub>=0.22.0
+
+# Development & Debugging
+pytest>=7.0.0
+pytest-asyncio>=0.24.0
