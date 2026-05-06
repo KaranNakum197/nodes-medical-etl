@@ -234,6 +234,17 @@ class QwenVLMExtractor:
             image = Image.open(image_path)
             if image.mode != 'RGB':
                 image = image.convert('RGB')
+                
+            # Prevent OOM by capping maximum resolution
+            max_size = 1536
+            if max(image.size) > max_size:
+                ratio = max_size / max(image.size)
+                new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
+                # Fallback for different Pillow versions
+                resample_filter = getattr(Image, "Resampling", Image).LANCZOS
+                image = image.resize(new_size, resample_filter)
+                logger.info(f"Resized image to {image.size} to prevent OOM")
+                
             logger.debug(f"Image loaded: {image.size}, mode: {image.mode}")
             
             # Use custom prompt or default
