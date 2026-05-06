@@ -206,8 +206,6 @@ class MedicalETLPipeline:
             result = self.crew.kickoff(
                 inputs={
                     "image_path": str(image_path),
-                    "mock_api_extract": mock_api_extract,
-                    "validate_extracted_data": validate_extracted_data,
                 }
             )
             

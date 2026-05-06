@@ -27,3 +27,6 @@ python-json-logger>=2.0.0
 # Optional: OpenAI for orchestration LLM (can be replaced)
 openai>=1.25.0
 langchain-openai>=0.1.0
+
+# LiteLLM for broad model support (e.g., Fireworks AI)
+litellm>=1.0.0
