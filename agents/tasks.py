@@ -272,7 +272,7 @@ def create_extractor_task(agent) -> Task:
         Extract structured medical data from a document image using the Vision Language Model.
         
         Steps:
-        1. Read the provided `image_path` input.
+        1. Read the provided image at {image_path}.
         2. Use the `VLM_API_Client` tool to send the image to the FastAPI server and extract the data.
         3. Parse the raw JSON response returned by the tool.
         4. Handle HTTP errors gracefully and retry if necessary.

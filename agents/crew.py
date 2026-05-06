@@ -280,10 +280,25 @@ class MedicalETLPipeline:
                     
                     # Aggregate results
                     if page_result["success"] and page_result["data"]:
-                        self._aggregate_results(
-                            aggregated_data,
-                            page_result["data"]
-                        )
+                        data = page_result["data"]
+                        parsed_data = {}
+                        
+                        if hasattr(data, "json_dict") and data.json_dict:
+                            parsed_data = data.json_dict
+                        elif hasattr(data, "raw"):
+                            import json
+                            try:
+                                parsed_data = json.loads(data.raw)
+                            except Exception:
+                                parsed_data = {}
+                        elif isinstance(data, dict):
+                            parsed_data = data
+                            
+                        if isinstance(parsed_data, dict) and parsed_data:
+                            self._aggregate_results(
+                                aggregated_data,
+                                parsed_data
+                            )
             
             logger.info(f"✓ PDF processing complete: {len(image_paths)} pages")
             
