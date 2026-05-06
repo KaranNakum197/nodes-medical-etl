@@ -248,9 +248,6 @@ class ExtractedReport(BaseModel):
         """
         return self.model_dump(exclude_none=True)
 
-    class Config:
-        extra = "ignore"
-
 
 # ============================================================================
 # CREWAI TASK DEFINITIONS
