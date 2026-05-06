@@ -16,6 +16,7 @@ Dependencies:
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from crewai import Agent, Crew, Process
@@ -272,11 +273,28 @@ class MedicalETLPipeline:
                 for page_num, image_path in enumerate(image_paths, start=1):
                     logger.info(f"Processing page {page_num}/{len(image_paths)}")
                     
-                    page_result = self.process_image(image_path)
+                    page_result = None
+                    max_retries = 4
+                    
+                    for attempt in range(max_retries):
+                        page_result = self.process_image(image_path)
+                        
+                        if not page_result["success"] and page_result.get("error") and ("RateLimitError" in page_result["error"] or "429" in page_result["error"]):
+                            if attempt < max_retries - 1:
+                                wait_time = 15 * (attempt + 1)
+                                logger.warning(f"Rate limit hit processing page {page_num}. Waiting {wait_time}s before retry {attempt+1}/{max_retries}...")
+                                time.sleep(wait_time)
+                                continue
+                        break
+                        
                     results.append({
                         "page": page_num,
                         **page_result
                     })
+                    
+                    # Add a small delay between normal processing to avoid triggering rate limits
+                    if page_num < len(image_paths):
+                        time.sleep(3)
                     
                     # Aggregate results
                     if page_result["success"] and page_result["data"]:
