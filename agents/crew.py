@@ -71,7 +71,7 @@ def create_extractor_agent() -> Agent:
         tools=[vlm_api_client],
         verbose=True,
         allow_delegation=False,
-        llm="fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+        llm="fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
     )
 
 
@@ -106,7 +106,7 @@ def create_validator_agent() -> Agent:
         tools=[postgres_insert_tool],
         verbose=True,
         allow_delegation=False,
-        llm="fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+        llm="fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
     )
 
 
