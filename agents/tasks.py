@@ -280,15 +280,9 @@ def create_extractor_task(agent) -> Task:
         CRITICAL: Return ONLY the extracted JSON object, no commentary.
         """,
         expected_output="""
-        Raw JSON string from VLM containing:
-        {
-            "patient_details": {...},
-            "lab_details": {...},
-            "sample_details": {...},
-            "report_results": [...]
-        }
+        Raw JSON string from VLM containing the required keys: patient_details, lab_details, sample_details, and report_results.
         
-        If extraction fails, return: {"error": "detailed error message"}
+        If extraction fails, return a JSON object with an 'error' key containing the detailed error message.
         """,
         agent=agent,
         async_execution=False,
@@ -329,20 +323,10 @@ def create_validator_task(agent) -> Task:
         - YOU MUST insert the record into the database before returning!
         """,
         expected_output="""
-        Clean, validated JSON conforming to ExtractedReport Pydantic schema:
-        {
-            "patient_details": {
-                "name": "string",
-                "patient_id": "optional",
-                ...
-            },
-            "lab_details": {...},
-            "sample_details": {...},
-            "report_results": [...]
-        }
+        Clean, validated JSON conforming to the ExtractedReport Pydantic schema.
+        The output must be a valid JSON string with the root keys: patient_details, lab_details, sample_details, and report_results.
         
-        On validation failure, return: 
-        {"error": "Validation failed: {details}", "raw_output": {...}}
+        On validation failure, return a JSON object with an 'error' key detailing the failure and a 'raw_output' key containing the original string.
         """,
         agent=agent,
         async_execution=False,

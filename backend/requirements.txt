@@ -8,9 +8,8 @@
 # ============================================================================
 
 # PyTorch & GPU Support (ROCm optimized)
-torch>=2.6.0
-torchvision>=0.21.0
-torchaudio>=2.6.0
+# Note: Install these manually via the pytorch.org nightly index!
+# Do NOT put them here or pip will overwrite the ROCm version with CUDA defaults.
 
 # Transformers & Vision Language Models
 transformers>=4.48.0
