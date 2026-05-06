@@ -275,10 +275,10 @@ def create_extractor_task(agent) -> Task:
         Extract structured medical data from a document image using the Vision Language Model.
         
         Steps:
-        1. Accept image path as input
-        2. Call the FastAPI /extract endpoint with the image file
-        3. Parse and return the raw JSON response from VLM
-        4. Handle HTTP errors gracefully with retry logic
+        1. Read the provided `image_path` input.
+        2. Use the `VLM_API_Client` tool to send the image to the FastAPI server and extract the data.
+        3. Parse the raw JSON response returned by the tool.
+        4. Handle HTTP errors gracefully and retry if necessary.
         
         CRITICAL: Return ONLY the extracted JSON object, no commentary.
         """,
@@ -317,13 +317,10 @@ def create_validator_task(agent) -> Task:
         
         Steps:
         1. Accept raw JSON from Extractor task
-        2. Attempt Pydantic validation against ExtractedReport schema
-        3. If validation fails, log errors and attempt recovery:
-           - Remove null/None values (schema allows optional fields)
-           - Coerce numeric values using parse_number() utility
-           - Parse ISO8601 datetimes to UTC
-           - Normalize phone numbers
-        4. Return validated and cleaned data as JSON
+        2. Validate against the ExtractedReport schema rules.
+        3. If validation fails, attempt recovery (e.g. coerce numbers, fix dates).
+        4. ONCE VALIDATED, you MUST use the `Postgres_Insert_Tool` to insert the clean JSON into the database.
+        5. Return the clean validated data along with the database insertion success message.
         
         CRITICAL RULES:
         - Omit fields with None/null values
@@ -332,6 +329,7 @@ def create_validator_task(agent) -> Task:
         - Ensure all datetimes are ISO8601 UTC
         - Reject if patient_details.name is missing
         - Log all validation errors for debugging
+        - YOU MUST insert the record into the database before returning!
         """,
         expected_output="""
         Clean, validated JSON conforming to ExtractedReport Pydantic schema:

@@ -20,24 +20,24 @@ class PDFToImageInput(BaseModel):
     output_dir: str = Field(
         default="",
         description=(
-            "Directory where PNG images will be saved. "
+            "Directory where JPEG images will be saved. "
             "Defaults to a temporary directory."
         ),
     )
-    dpi: int = Field(default=200, description="Resolution for PDF rendering (DPI).")
+    dpi: int = Field(default=300, description="Resolution for PDF rendering (DPI). Medical docs recommend 300.")
 
 
 class PDFToImageTool(BaseTool):
     """
-    Converts a PDF document to a list of PNG images.
+    Converts a PDF document to a list of JPEG images.
 
-    Each page of the PDF becomes a separate PNG file.
+    Each page of the PDF becomes a separate JPEG file.
     Returns a newline-separated list of absolute image paths.
     """
 
     name: str = "PDFToImageConverter"
     description: str = (
-        "Converts a PDF file to PNG images (one per page). "
+        "Converts a PDF file to JPEG images (one per page). "
         "Returns a newline-separated list of absolute paths to the generated images."
     )
     args_schema: Type[BaseModel] = PDFToImageInput
@@ -46,7 +46,7 @@ class PDFToImageTool(BaseTool):
         self,
         pdf_path: str,
         output_dir: str = "",
-        dpi: int = 200,
+        dpi: int = 300,
     ) -> str:
         """Execute the PDF-to-image conversion."""
         from pdf2image import convert_from_path
@@ -61,8 +61,8 @@ class PDFToImageTool(BaseTool):
         image_paths: list[str] = []
 
         for idx, page in enumerate(pages, start=1):
-            img_path = os.path.join(save_dir, f"page_{idx:04d}.png")
-            page.save(img_path, "PNG")
+            img_path = os.path.join(save_dir, f"page_{idx:04d}.jpg")
+            page.save(img_path, "JPEG", quality=95, optimize=True)
             image_paths.append(img_path)
 
         return "\n".join(image_paths)

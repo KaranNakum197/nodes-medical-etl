@@ -54,6 +54,7 @@ def create_extractor_agent() -> Agent:
     Returns:
         CrewAI Agent configured for extraction tasks.
     """
+    from tools.pipeline_tools import vlm_api_client
     return Agent(
         role="Medical Data Extractor",
         goal=(
@@ -67,9 +68,10 @@ def create_extractor_agent() -> Agent:
             "and reliably extract data from medical documents, handling edge "
             "cases and image quality issues gracefully."
         ),
-        tools=[],  # Tools can be added here (e.g., HTTPClient for API calls)
+        tools=[vlm_api_client],
         verbose=True,
         allow_delegation=False,
+        llm="fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
     )
 
 
@@ -87,6 +89,7 @@ def create_validator_agent() -> Agent:
     Returns:
         CrewAI Agent configured for validation tasks.
     """
+    from tools.pipeline_tools import postgres_insert_tool
     return Agent(
         role="Medical Data Validator",
         goal=(
@@ -100,9 +103,10 @@ def create_validator_agent() -> Agent:
             "data point meets clinical and regulatory compliance standards before "
             "entering the database."
         ),
-        tools=[],  # Can add validation tools here
+        tools=[postgres_insert_tool],
         verbose=True,
         allow_delegation=False,
+        llm="fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
     )
 
 

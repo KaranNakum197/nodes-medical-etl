@@ -37,6 +37,7 @@ def _load_model():
         torch_dtype=torch.float16,
         device_map=device,
         trust_remote_code=True,
+        attn_implementation="eager",
     )
     _model.eval()
 

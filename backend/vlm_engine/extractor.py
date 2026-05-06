@@ -166,6 +166,7 @@ class QwenVLMExtractor:
                 device_map="auto",
                 trust_remote_code=True,  # Required for Qwen models
                 low_cpu_mem_usage=True,  # Minimize CPU memory during loading
+                attn_implementation="eager",  # Critical fix for ROCm PyTorch SDPA
             )
             
             # Load processor for image/text tokenization
