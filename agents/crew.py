@@ -60,7 +60,8 @@ def create_extractor_agent() -> Agent:
         role="Medical Data Extractor",
         goal=(
             "Extract structured medical data from document images using "
-            "Vision Language Model inference. Return clean, parseable JSON."
+            "the `VLM_API_Client` tool exclusively. You MUST call this tool. "
+            "Return the exact JSON produced by the tool, do not make up data."
         ),
         backstory=(
             "You are an expert medical document processor with deep knowledge "
@@ -95,7 +96,7 @@ def create_validator_agent() -> Agent:
         role="Medical Data Validator",
         goal=(
             "Ensure extracted medical data conforms to strict schema requirements. "
-            "Validate, clean, and prepare data for database ingestion."
+            "Validate, clean, and then YOU MUST insert data using `Postgres_Insert_Tool`."
         ),
         backstory=(
             "You are a data quality expert specializing in healthcare ETL pipelines. "

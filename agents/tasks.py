@@ -273,11 +273,11 @@ def create_extractor_task(agent) -> Task:
         
         Steps:
         1. Read the provided image at {image_path}.
-        2. Use the `VLM_API_Client` tool to send the image to the FastAPI server and extract the data.
-        3. Parse the raw JSON response returned by the tool.
+        2. You MUST use the `VLM_API_Client` tool to send the image to the FastAPI server and extract the data. DO NOT output a tool-call JSON as your final answer.
+        3. Extract the raw JSON response returned by the tool.
         4. Handle HTTP errors gracefully and retry if necessary.
         
-        CRITICAL: Return ONLY the extracted JSON object, no commentary.
+        CRITICAL: Use the tool provided. Your Final Answer MUST be the actual extracted medical data JSON, NOT a function call JSON.
         """,
         expected_output="""
         Raw JSON string from VLM containing the required keys: patient_details, lab_details, sample_details, and report_results.
@@ -310,7 +310,7 @@ def create_validator_task(agent) -> Task:
         1. Accept raw JSON from Extractor task
         2. Validate against the ExtractedReport schema rules.
         3. If validation fails, attempt recovery (e.g. coerce numbers, fix dates).
-        4. ONCE VALIDATED, you MUST use the `Postgres_Insert_Tool` to insert the clean JSON into the database.
+        4. ONCE VALIDATED, you MUST use the `Postgres_Insert_Tool` to insert the clean JSON into the database. Pass the clean JSON string to the `validated_json_str` parameter.
         5. Return the clean validated data along with the database insertion success message.
         
         CRITICAL RULES:
@@ -320,7 +320,7 @@ def create_validator_task(agent) -> Task:
         - Ensure all datetimes are ISO8601 UTC
         - Reject if patient_details.name is missing
         - Log all validation errors for debugging
-        - YOU MUST insert the record into the database before returning!
+        - YOU MUST actually invoke the `Postgres_Insert_Tool` using the tool mechanism. Do NOT output a function call JSON as your final answer.
         """,
         expected_output="""
         Clean, validated JSON conforming to the ExtractedReport Pydantic schema.

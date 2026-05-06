@@ -37,11 +37,19 @@ def vlm_api_client(image_path: str) -> str:
 
 
 @tool("Postgres_Insert_Tool")
-def postgres_insert_tool(validated_json_str: str) -> str:
+def postgres_insert_tool(validated_json_str: str = None, **kwargs) -> str:
     """
     Inserts the validated medical record JSON into the PostgreSQL database.
     Input MUST be the cleaned, strictly formatted JSON string from the validator.
     """
+    if not validated_json_str and kwargs:
+        if "raw_json" in kwargs:
+            validated_json_str = kwargs["raw_json"]
+        elif "function_params" in kwargs and "raw_json" in kwargs["function_params"]:
+            validated_json_str = kwargs["function_params"]["raw_json"]
+        else:
+            validated_json_str = json.dumps(kwargs)
+
     try:
         data = json.loads(validated_json_str)
         
