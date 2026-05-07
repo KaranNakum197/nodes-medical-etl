@@ -56,14 +56,16 @@ class QwenVLMExtractor:
     
     # Medical data extraction prompt template
     EXTRACTION_PROMPT = """
-    You are a medical report extractor.
-    Analyze the medical lab report.
-    Return EXACTLY one JSON object matching the schema below.
-    Return JSON only (no text, no commentary). 
+    You are an expert medical data extractor. 
+    Analyze the provided medical lab report image and extract all visible data.
     
-    CRITICAL: Extract 'patient_details.name' accurately from the PDF header. 
-    Important Instruction: Omit fields if value is not present in the report. Do NOT use null. Don't Return any fields with null value. Just Ignore that field.
-
+    CRITICAL INSTRUCTIONS:
+    1. Extract the REAL DATA from the image.
+    2. Do NOT hallucinate or guess data. Never use fake names like "John Doe" or fake IDs like "PAT123".
+    3. If a value is missing from the image or illegible, COMPLETELY OMIT that field from your JSON. Do NOT output null, do NOT output "string" or "alphanumeric".
+    4. Return EXACTLY one JSON object using the structure below, populated with the ACTUAL text found in the image.
+    
+    JSON SCHEMA STRUCTURE (Use this structure, but replace the right-hand values with REAL data from the image):
     {
     "patient_details": {
         "patient_id": "alphanumeric",
@@ -159,11 +161,12 @@ class QwenVLMExtractor:
         )
         
         try:
-            # Load model with auto device mapping (optimized for ROCm/multi-GPU)
+            # Force device_map="cuda" instead of "auto" 
+            # Accelerate sometimes misreads AMD ROCm memory and silently falls back to CPU
             self.model = Qwen2VLForConditionalGeneration.from_pretrained(
                 self.model_id,
                 torch_dtype=self.torch_dtype,
-                device_map="auto",
+                device_map="cuda",
                 trust_remote_code=True,  # Required for Qwen models
                 low_cpu_mem_usage=True,  # Minimize CPU memory during loading
                 attn_implementation="eager",  # Critical fix for ROCm PyTorch SDPA
