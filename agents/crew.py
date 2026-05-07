@@ -94,11 +94,9 @@ def create_extractor_agent() -> Agent:
         backstory=(
             "You are an expert medical document processor with deep knowledge "
             "of laboratory reports, diagnostic summaries, and clinical data "
-            "formats. Your role is to interface with the VLM inference engine "
-            "and reliably extract data from medical documents, handling edge "
-            "cases and image quality issues gracefully."
+            "formats. Your role is to take raw medical report strings and "
+            "ensure they are properly structured."
         ),
-        tools=[vlm_api_client],
         verbose=True,
         allow_delegation=False,
         llm=_get_fireworks_llm(),
@@ -133,7 +131,6 @@ def create_validator_agent() -> Agent:
             "data point meets clinical and regulatory compliance standards before "
             "entering the database."
         ),
-        tools=[postgres_insert_tool],
         verbose=True,
         allow_delegation=False,
         llm=_get_fireworks_llm(),
@@ -168,11 +165,12 @@ def create_medical_etl_crew() -> Crew:
     extraction_task = create_extractor_task(extractor)
     validation_task = create_validator_task(validator)
     
-    # Create crew with sequential process
+    # Create crew with just the validator
+    # Extraction is handled natively via API to improve reliability
     crew = Crew(
-        agents=[extractor, validator],
-        tasks=[extraction_task, validation_task],
-        process=Process.sequential,  # Tasks run in order
+        agents=[validator],
+        tasks=[validation_task],
+        process=Process.sequential,
         verbose=True,
     )
     
@@ -232,18 +230,45 @@ class MedicalETLPipeline:
         logger.info(f"Processing image: {image_path}")
         
         try:
-            # Run crew with image path input
+            # 1. Direct Tool Invocation (Bypassing LLM orchestration)
+            from tools.pipeline_tools import vlm_api_client, postgres_insert_tool
+            
+            logger.info("Invoking VLM API Client...")
+            raw_json_str = vlm_api_client(str(image_path))
+            
+            if "Error from VLM API" in raw_json_str or "Failed to call VLM API" in raw_json_str:
+                 return {
+                     "success": False,
+                     "error": raw_json_str,
+                     "data": None
+                 }
+                 
+            logger.info("VLM API returned raw data. Handing off to Validator Agent...")
+            
+            # 2. Run validator crew with raw JSON input
             result = self.crew.kickoff(
                 inputs={
-                    "image_path": str(image_path),
+                    "raw_json": raw_json_str,
                 }
             )
+            
+            # Extract the actual text from the Crew output
+            if hasattr(result, "raw"):
+                clean_json_str = result.raw
+            else:
+                clean_json_str = str(result)
+            
+            logger.info("Validator Agent returned clean JSON. Inserting into Postgres...")
+            
+            # 3. Direct Postgres Insertion
+            db_response = postgres_insert_tool(validated_json_str=clean_json_str)
+            logger.info(f"Database tool response: {db_response}")
             
             logger.info(f"✓ Processing complete for {image_path.name}")
             
             return {
                 "success": True,
-                "data": result,
+                "data": clean_json_str,
                 "error": None,
             }
         

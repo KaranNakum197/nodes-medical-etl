@@ -270,13 +270,7 @@ def create_extractor_task(agent) -> Task:
         2. You MUST use the `VLM_API_Client` tool to send the image to the FastAPI server and extract the data. DO NOT output a tool-call JSON as your final answer.
         3. Extract the raw JSON response returned by the tool.
         4. Handle HTTP errors gracefully and retry if necessary.
-        CRITICAL: To execute the tool, you MUST use the exact following format, including the "Thought:" line:
-        Thought: I need to extract data from the image using the VLM_API_Client.
-        Action: VLM_API_Client
-        Action Input: {"image_path": "{image_path}"}
-        
-        Do NOT output `{"type": "function", ...}`. You must use the Thought / Action / Action Input format above.
-        Your Final Answer MUST be the actual extracted medical data JSON, NOT a function call JSON.
+        CRITICAL: Your Final Answer MUST be the actual extracted medical data JSON.
         """,
         expected_output="""
         Raw JSON string from VLM containing the required keys: patient_details, lab_details, sample_details, and report_results.
@@ -306,11 +300,10 @@ def create_validator_task(agent) -> Task:
         Validate and clean extracted medical data against strict Pydantic schema.
         
         Steps:
-        1. Accept raw JSON from Extractor task
+        1. Accept raw JSON: {raw_json}
         2. Validate against the ExtractedReport schema rules.
         3. If validation fails, attempt recovery (e.g. coerce numbers, fix dates).
-        4. ONCE VALIDATED, you MUST use the `Postgres_Insert_Tool` to insert the clean JSON into the database. Pass the clean JSON string to the `validated_json_str` parameter.
-        5. Return the clean validated data along with the database insertion success message.
+        4. Return the clean validated data as your final answer.
         
         CRITICAL RULES:
         - Omit fields with None/null values
@@ -320,12 +313,7 @@ def create_validator_task(agent) -> Task:
         - Reject if patient_details.name is missing
         - Log all validation errors for debugging
         
-        CRITICAL: To execute the insertion tool, you MUST use the exact following format, including the "Thought:" line:
-        Thought: I need to insert the validated data into the database.
-        Action: Postgres_Insert_Tool
-        Action Input: {"validated_json_str": "YOUR_CLEAN_JSON_STRING_HERE"}
-        
-        Do NOT output `{"type": "function", ...}`. You must use the Thought / Action / Action Input format above.
+        CRITICAL: You do NOT have any tools. Just output the clean JSON string as your Final Answer.
         """,
         expected_output="""
         Clean, validated JSON conforming to the ExtractedReport Pydantic schema.
