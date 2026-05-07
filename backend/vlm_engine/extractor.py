@@ -194,7 +194,7 @@ class QwenVLMExtractor:
         image_paths: list[str],
         custom_prompt: Optional[str] = None,
         max_tokens: int = 4096,
-        temperature: float = 0.2,
+        temperature: float = 0.0,
     ) -> str:
         """
         Extract medical data from multiple images in chronological order using VLM inference.
@@ -279,13 +279,18 @@ class QwenVLMExtractor:
             logger.debug(f"Inputs prepared: {inputs.input_ids.shape}")
             
             # Inference with generation parameters
+            gen_kwargs = {
+                "max_new_tokens": max_tokens,
+                "do_sample": False if temperature == 0 else True,
+            }
+            if gen_kwargs["do_sample"]:
+                gen_kwargs["temperature"] = temperature
+                gen_kwargs["top_p"] = 0.95
+                
             with torch.no_grad():
                 output_ids = self.model.generate(
                     **inputs,
-                    max_new_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=0.95,
-                    do_sample=False if temperature == 0 else True,
+                    **gen_kwargs
                 )
             
             # Decode output
