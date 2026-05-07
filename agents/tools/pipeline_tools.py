@@ -13,7 +13,6 @@ from backend.database.models import MedicalRecord
 from datetime import datetime
 
 
-@tool("VLM_API_Client")
 def vlm_api_client(image_path: str) -> str:
     """
     Sends a medical document image to the FastAPI VLM engine and returns the extracted JSON data.
@@ -38,7 +37,6 @@ def vlm_api_client(image_path: str) -> str:
         return f"Failed to call VLM API: {str(e)}"
 
 
-@tool("Postgres_Insert_Tool")
 def postgres_insert_tool(validated_json_str: str = None, **kwargs) -> str:
     """
     Inserts the validated medical record JSON into the PostgreSQL database.
