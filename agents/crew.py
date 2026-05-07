@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from crewai import Agent, Crew, Process
+from crewai import Agent, Crew, LLM, Process
 
 # Import task builders and validation utilities
 from tasks import (
@@ -36,6 +36,28 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Model configuration — reads from env with sensible default
+ORCHESTRATOR_MODEL = os.getenv(
+    "ORCHESTRATOR_MODEL",
+    "fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
+)
+
+
+def _get_fireworks_llm() -> LLM:
+    """
+    Create a configured Fireworks LLM with proper timeout and retry settings.
+
+    Uses ORCHESTRATOR_MODEL env var for model selection and FIREWORKS_API_KEY
+    for authentication.  Timeout is set high (300s) to handle serverless
+    cold-starts on the Fireworks shared-GPU tier.
+    """
+    return LLM(
+        model=ORCHESTRATOR_MODEL,
+        api_key=os.getenv("FIREWORKS_API_KEY"),
+        timeout=300,      # 5 minutes — prevents premature client-side timeout
+        max_retries=3,    # auto-retry on transient 408/503 errors
+    )
 
 
 # ============================================================================
@@ -73,7 +95,7 @@ def create_extractor_agent() -> Agent:
         tools=[vlm_api_client],
         verbose=True,
         allow_delegation=False,
-        llm="fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
+        llm=_get_fireworks_llm(),
     )
 
 
@@ -108,7 +130,7 @@ def create_validator_agent() -> Agent:
         tools=[postgres_insert_tool],
         verbose=True,
         allow_delegation=False,
-        llm="fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
+        llm=_get_fireworks_llm(),
     )
 
 

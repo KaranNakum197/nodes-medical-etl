@@ -28,6 +28,8 @@ import uvicorn
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from vlm_engine.extractor import QwenVLMExtractor, VLMInferenceError
+from database.connection import get_db_session
+from database.models import MedicalRecord
 
 
 # Configure logging
@@ -352,13 +354,9 @@ if __name__ == "__main__":
     run_server(host=args.host, port=args.port, reload=args.reload)
 
 
-@app.get("/records")
+@app.get("/records", tags=["Data"])
 async def list_records():
     """Return all previously extracted records from the database."""
     with get_db_session() as session:
-        records = session.query(ExtractionRecord).all()
+        records = session.query(MedicalRecord).all()
         return [r.to_dict() for r in records]
-
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

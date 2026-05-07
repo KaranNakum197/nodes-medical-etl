@@ -3,6 +3,7 @@ import json
 import httpx
 from crewai.tools import tool
 import sys
+import os
 from pathlib import Path
 
 # Add backend to path to import database models
@@ -20,10 +21,11 @@ def vlm_api_client(image_path: str) -> str:
     """
     try:
         # Use sync httpx or requests for tool simplicity
-        with httpx.Client(timeout=60.0) as client:
+        vlm_api_url = os.getenv("VLM_API_URL", "http://localhost:8000/extract")
+        with httpx.Client(timeout=180.0) as client:
             with open(image_path, 'rb') as f:
                 response = client.post(
-                    "http://localhost:8000/extract",
+                    vlm_api_url,
                     files={"file": f}
                 )
             
@@ -68,13 +70,16 @@ def postgres_insert_tool(validated_json_str: str = None, **kwargs) -> str:
             except ValueError:
                 pass
 
-        # Check for anomalies loosely based on 'global_remarks' or 'High'/'Low' interpretations
-        anomalies_flagged = False
-        results = data.get("report_results", [])
-        for res in results:
-            if str(res.get("interpretation")).lower() in ["high", "low", "abnormal"]:
-                anomalies_flagged = True
-                break
+        # Check for anomalies in top-level results AND nested panel members
+        def _has_anomaly(items):
+            for res in (items or []):
+                if str(res.get("interpretation", "")).lower() in ["high", "low", "abnormal"]:
+                    return True
+                if _has_anomaly(res.get("members")):
+                    return True
+            return False
+
+        anomalies_flagged = _has_anomaly(data.get("report_results", []))
 
         with get_db_session() as session:
             record = MedicalRecord(

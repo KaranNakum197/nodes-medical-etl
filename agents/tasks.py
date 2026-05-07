@@ -93,9 +93,7 @@ class MemberModel(BaseModel):
         """Coerce numeric value using parse_number."""
         return parse_number(v)
     
-    class Config:
-        # Allow extra fields but ignore them
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class ReportResultModel(BaseModel):
@@ -127,8 +125,7 @@ class ReportResultModel(BaseModel):
         """Coerce numeric value using parse_number."""
         return parse_number(v)
     
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class SampleDetailsModel(BaseModel):
@@ -174,8 +171,7 @@ class SampleDetailsModel(BaseModel):
             logger.warning(f"Failed to parse datetime '{v}': {e}")
             return None
     
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class PatientDetailsModel(BaseModel):
@@ -186,8 +182,7 @@ class PatientDetailsModel(BaseModel):
     address: Optional[str] = None
     gender: Optional[str] = None
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class LabDetailsModel(BaseModel):
@@ -208,8 +203,7 @@ class LabDetailsModel(BaseModel):
             return None
         return str(v)
     
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class ExtractedReport(BaseModel):
