@@ -8,8 +8,8 @@ from pathlib import Path
 
 # Add backend to path to import database models
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "backend"))
-from database.connection import get_db_session
-from database.models import MedicalRecord
+from backend.database.connection import get_db_session
+from backend.database.models import MedicalRecord
 from datetime import datetime
 
 

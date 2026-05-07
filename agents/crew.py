@@ -47,13 +47,19 @@ ORCHESTRATOR_MODEL = os.getenv(
 def _get_fireworks_llm() -> LLM:
     """
     Create a configured Fireworks LLM with proper timeout and retry settings.
-
+    
     Uses ORCHESTRATOR_MODEL env var for model selection and FIREWORKS_API_KEY
     for authentication.  Timeout is set high (300s) to handle serverless
     cold-starts on the Fireworks shared-GPU tier.
     """
+    model_name = ORCHESTRATOR_MODEL
+    # LiteLLM requires the provider prefix. If the user copied the string directly
+    # from the Fireworks UI (which starts with 'accounts/'), prepend the provider.
+    if model_name.startswith("accounts/fireworks/"):
+        model_name = f"fireworks_ai/{model_name}"
+
     return LLM(
-        model=ORCHESTRATOR_MODEL,
+        model=model_name,
         api_key=os.getenv("FIREWORKS_API_KEY"),
         timeout=300,      # 5 minutes — prevents premature client-side timeout
         max_retries=3,    # auto-retry on transient 408/503 errors
