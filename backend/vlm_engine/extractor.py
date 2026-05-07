@@ -217,9 +217,7 @@ class QwenVLMExtractor:
             >>> result = extractor.extract_from_images(["page_1.jpg", "page_2.jpg"])
             >>> data = json.loads(result)
         """
-        image_path = Path(image_path)
-        
-        
+
         valid_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'}
         processed_images = []
         
