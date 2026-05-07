@@ -321,9 +321,9 @@ class MedicalETLPipeline:
                         **page_result
                     })
                     
-                    # Add a small delay between normal processing to avoid triggering rate limits
+                    # Add a delay between normal processing to avoid triggering rate limits
                     if page_num < len(image_paths):
-                        time.sleep(3)
+                        time.sleep(15)
                     
                     # Aggregate results
                     if page_result["success"] and page_result["data"]:
