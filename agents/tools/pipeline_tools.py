@@ -13,18 +13,20 @@ from backend.database.models import MedicalRecord
 from datetime import datetime
 
 
-def vlm_api_client(image_path: str) -> str:
+def vlm_api_client(image_paths: list[str]) -> str:
     """
-    Sends a medical document image to the FastAPI VLM engine and returns the extracted JSON data.
-    Input MUST be the absolute path to the image file.
+    Sends medical document images to the FastAPI VLM engine and returns the extracted JSON data.
+    Input MUST be a list of absolute paths to the image files.
     """
     try:
         import base64
         # Import the prompt we already perfected
         from backend.vlm_engine.extractor import QwenVLMExtractor
         
-        with open(image_path, "rb") as f:
-            base64_image = base64.b64encode(f.read()).decode("utf-8")
+        base64_images = []
+        for path in image_paths:
+            with open(path, "rb") as f:
+                base64_images.append(base64.b64encode(f.read()).decode("utf-8"))
             
         payload = {
             "model": "llama3.2-vision",
@@ -32,7 +34,7 @@ def vlm_api_client(image_path: str) -> str:
                 {
                     "role": "user",
                     "content": QwenVLMExtractor.EXTRACTION_PROMPT,
-                    "images": [base64_image]
+                    "images": base64_images
                 }
             ],
             "stream": False,

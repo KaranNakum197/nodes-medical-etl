@@ -203,38 +203,36 @@ class MedicalETLPipeline:
         self.crew = create_medical_etl_crew()
         logger.info("MedicalETLPipeline initialized")
     
-    def process_image(self, image_path: str) -> dict:
+    def process_images(self, image_paths: list[str]) -> dict:
         """
-        Process a single medical document image.
+        Process multiple medical document images in a single batch.
         
         Args:
-            image_path: Path to image file (JPEG, PNG, etc.)
+            image_paths: List of paths to image files (JPEG, PNG, etc.)
             
         Returns:
             {
                 "success": bool,
                 "data": {...validated JSON...},
                 "error": "error message if failed",
-                "logs": "crew execution logs"
             }
         """
-        image_path = Path(image_path)
+        for path in image_paths:
+            if not Path(path).exists():
+                return {
+                    "success": False,
+                    "error": f"Image file not found: {path}",
+                    "data": None,
+                }
         
-        if not image_path.exists():
-            return {
-                "success": False,
-                "error": f"Image file not found: {image_path}",
-                "data": None,
-            }
-        
-        logger.info(f"Processing image: {image_path}")
+        logger.info(f"Processing {len(image_paths)} images in a single batch...")
         
         try:
             # 1. Direct Tool Invocation (Bypassing LLM orchestration)
             from tools.pipeline_tools import vlm_api_client, postgres_insert_tool
             
             logger.info("Invoking VLM API Client...")
-            raw_json_str = vlm_api_client(str(image_path))
+            raw_json_str = vlm_api_client(image_paths)
             
             if "Error from VLM API" in raw_json_str or "Failed to call VLM API" in raw_json_str:
                  return {
@@ -264,7 +262,7 @@ class MedicalETLPipeline:
             db_response = postgres_insert_tool(validated_json_str=clean_json_str)
             logger.info(f"Database tool response: {db_response}")
             
-            logger.info(f"✓ Processing complete for {image_path.name}")
+            logger.info(f"✓ Processing complete for batch of {len(image_paths)} images")
             
             return {
                 "success": True,
@@ -284,19 +282,7 @@ class MedicalETLPipeline:
     
     def process_pdf(self, pdf_path: str) -> dict:
         """
-        Process a PDF by converting to images first.
-        
-        Args:
-            pdf_path: Path to PDF file.
-            
-        Returns:
-            {
-                "success": bool,
-                "results": [
-                    {page_num: {...data...}, "error": "...", ...}
-                ],
-                "summary": {...aggregated results...}
-            }
+        Process a PDF by converting to images first, then extracting all at once.
         """
         from tools.pdf_processor import PDFProcessor, PDFProcessingError
         
@@ -310,76 +296,15 @@ class MedicalETLPipeline:
         
         logger.info(f"Processing PDF: {pdf_path}")
         
-        results = []
-        aggregated_data = {
-            "patient_details": {},
-            "lab_details": {},
-            "sample_details": {},
-            "report_results": [],
-        }
-        
         try:
             # Convert PDF to images
             with PDFProcessor(dpi=300) as processor:
                 image_paths, temp_dir = processor.process_pdf(str(pdf_path))
                 
-                # Process each page
-                for page_num, image_path in enumerate(image_paths, start=1):
-                    logger.info(f"Processing page {page_num}/{len(image_paths)}")
-                    
-                    page_result = None
-                    max_retries = 4
-                    
-                    for attempt in range(max_retries):
-                        page_result = self.process_image(image_path)
-                        
-                        if not page_result["success"] and page_result.get("error") and ("RateLimitError" in page_result["error"] or "429" in page_result["error"]):
-                            if attempt < max_retries - 1:
-                                wait_time = 15 * (attempt + 1)
-                                logger.warning(f"Rate limit hit processing page {page_num}. Waiting {wait_time}s before retry {attempt+1}/{max_retries}...")
-                                time.sleep(wait_time)
-                                continue
-                        break
-                        
-                    results.append({
-                        "page": page_num,
-                        **page_result
-                    })
-                    
-                    # Add a delay between normal processing to avoid triggering rate limits
-                    if page_num < len(image_paths):
-                        time.sleep(15)
-                    
-                    # Aggregate results
-                    if page_result["success"] and page_result["data"]:
-                        data = page_result["data"]
-                        parsed_data = {}
-                        
-                        if hasattr(data, "json_dict") and data.json_dict:
-                            parsed_data = data.json_dict
-                        elif hasattr(data, "raw"):
-                            import json
-                            try:
-                                parsed_data = json.loads(data.raw)
-                            except Exception:
-                                parsed_data = {}
-                        elif isinstance(data, dict):
-                            parsed_data = data
-                            
-                        if isinstance(parsed_data, dict) and parsed_data:
-                            self._aggregate_results(
-                                aggregated_data,
-                                parsed_data
-                            )
-            
-            logger.info(f"✓ PDF processing complete: {len(image_paths)} pages")
-            
-            return {
-                "success": True,
-                "results": results,
-                "summary": aggregated_data,
-            }
-        
+                logger.info(f"Converted PDF to {len(image_paths)} pages. Sending all at once to GPU...")
+                
+                return self.process_images(image_paths)
+                
         except PDFProcessingError as e:
             error_msg = f"PDF processing failed: {str(e)}"
             logger.error(error_msg)
@@ -387,7 +312,6 @@ class MedicalETLPipeline:
             return {
                 "success": False,
                 "error": error_msg,
-                "results": results,
             }
         
         except Exception as e:
@@ -397,37 +321,7 @@ class MedicalETLPipeline:
             return {
                 "success": False,
                 "error": error_msg,
-                "results": results,
             }
-    
-    @staticmethod
-    def _aggregate_results(aggregated: dict, page_data: dict) -> None:
-        """
-        Aggregate results from multiple pages.
-        
-        Merges patient/lab/sample details and concatenates test results.
-        
-        Args:
-            aggregated: Running aggregation dictionary.
-            page_data: Data from current page.
-        """
-        # Merge patient details (use first non-empty)
-        if page_data.get("patient_details"):
-            if not aggregated["patient_details"]:
-                aggregated["patient_details"] = page_data["patient_details"]
-        
-        # Merge lab details
-        if page_data.get("lab_details"):
-            if not aggregated["lab_details"]:
-                aggregated["lab_details"] = page_data["lab_details"]
-        
-        # Merge sample details
-        if page_data.get("sample_details"):
-            aggregated["sample_details"].update(page_data["sample_details"])
-        
-        # Concatenate test results
-        if page_data.get("report_results"):
-            aggregated["report_results"].extend(page_data["report_results"])
 
 
 # ============================================================================
@@ -459,7 +353,7 @@ def main():
         if file_path.lower().endswith('.pdf'):
             result = pipeline.process_pdf(file_path)
         else:
-            result = pipeline.process_image(file_path)
+            result = pipeline.process_images([file_path])
         
         # Print results
         if result["success"]:
