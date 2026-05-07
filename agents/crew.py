@@ -211,43 +211,30 @@ class MedicalETLPipeline:
             image_path: Path to image file (JPEG, PNG, etc.)
             
         Returns:
-            Extracted data dict.
-        """
-        return self.process_images([image_path])
-        
-    def process_images(self, image_paths: list[str]) -> dict:
-        """
-        Process multiple medical document images in a single shot.
-        
-        Args:
-            image_paths: List of paths to image files.
-            
-        Returns:
             {
                 "success": bool,
                 "data": {...validated JSON...},
                 "error": "error message if failed",
+                "logs": "crew execution logs"
             }
         """
-        valid_paths = []
-        for p in image_paths:
-            path = Path(p)
-            if not path.exists():
-                return {
-                    "success": False,
-                    "error": f"Image file not found: {path}",
-                    "data": None,
-                }
-            valid_paths.append(str(path))
-            
-        logger.info(f"Processing {len(valid_paths)} images in single-shot batch")
+        image_path = Path(image_path)
+        
+        if not image_path.exists():
+            return {
+                "success": False,
+                "error": f"Image file not found: {image_path}",
+                "data": None,
+            }
+        
+        logger.info(f"Processing image: {image_path}")
         
         try:
             # 1. Direct Tool Invocation (Bypassing LLM orchestration)
             from tools.pipeline_tools import vlm_api_client, postgres_insert_tool
             
             logger.info("Invoking VLM API Client...")
-            raw_json_str = vlm_api_client(valid_paths)
+            raw_json_str = vlm_api_client(str(image_path))
             
             if "Error from VLM API" in raw_json_str or "Failed to call VLM API" in raw_json_str:
                  return {
@@ -277,7 +264,7 @@ class MedicalETLPipeline:
             db_response = postgres_insert_tool(validated_json_str=clean_json_str)
             logger.info(f"Database tool response: {db_response}")
             
-            logger.info(f"✓ Processing complete for {len(valid_paths)} images")
+            logger.info(f"✓ Processing complete for {image_path.name}")
             
             return {
                 "success": True,
@@ -297,7 +284,7 @@ class MedicalETLPipeline:
     
     def process_pdf(self, pdf_path: str) -> dict:
         """
-        Process a PDF by converting to images first, then processing all in a single shot.
+        Process a PDF by converting to images first.
         
         Args:
             pdf_path: Path to PDF file.
@@ -305,8 +292,10 @@ class MedicalETLPipeline:
         Returns:
             {
                 "success": bool,
-                "data": {...data...},
-                "summary": {...data...}
+                "results": [
+                    {page_num: {...data...}, "error": "...", ...}
+                ],
+                "summary": {...aggregated results...}
             }
         """
         from tools.pdf_processor import PDFProcessor, PDFProcessingError
@@ -321,44 +310,75 @@ class MedicalETLPipeline:
         
         logger.info(f"Processing PDF: {pdf_path}")
         
+        results = []
+        aggregated_data = {
+            "patient_details": {},
+            "lab_details": {},
+            "sample_details": {},
+            "report_results": [],
+        }
+        
         try:
             # Convert PDF to images
             with PDFProcessor(dpi=300) as processor:
                 image_paths, temp_dir = processor.process_pdf(str(pdf_path))
                 
-                # Process all pages at once
-                logger.info(f"PDF converted to {len(image_paths)} images. Running single-shot inference...")
-                
-                max_retries = 4
-                result = None
-                
-                for attempt in range(max_retries):
-                    result = self.process_images(image_paths)
+                # Process each page
+                for page_num, image_path in enumerate(image_paths, start=1):
+                    logger.info(f"Processing page {page_num}/{len(image_paths)}")
                     
-                    if not result["success"] and result.get("error") and ("RateLimitError" in result["error"] or "429" in result["error"]):
-                        if attempt < max_retries - 1:
-                            wait_time = 15 * (attempt + 1)
-                            logger.warning(f"Rate limit hit. Waiting {wait_time}s before retry {attempt+1}/{max_retries}...")
-                            time.sleep(wait_time)
-                            continue
-                    break
+                    page_result = None
+                    max_retries = 4
                     
-                logger.info(f"✓ PDF single-shot processing complete")
-                
-                parsed_data = {}
-                if result["success"] and result.get("data"):
-                    import json
-                    try:
-                        parsed_data = json.loads(result["data"])
-                    except Exception:
-                        pass
-                
-                return {
-                    "success": result["success"],
-                    "error": result.get("error"),
-                    "data": parsed_data,
-                    "summary": parsed_data, # Retained for backwards compatibility
-                }
+                    for attempt in range(max_retries):
+                        page_result = self.process_image(image_path)
+                        
+                        if not page_result["success"] and page_result.get("error") and ("RateLimitError" in page_result["error"] or "429" in page_result["error"]):
+                            if attempt < max_retries - 1:
+                                wait_time = 15 * (attempt + 1)
+                                logger.warning(f"Rate limit hit processing page {page_num}. Waiting {wait_time}s before retry {attempt+1}/{max_retries}...")
+                                time.sleep(wait_time)
+                                continue
+                        break
+                        
+                    results.append({
+                        "page": page_num,
+                        **page_result
+                    })
+                    
+                    # Add a delay between normal processing to avoid triggering rate limits
+                    if page_num < len(image_paths):
+                        time.sleep(15)
+                    
+                    # Aggregate results
+                    if page_result["success"] and page_result["data"]:
+                        data = page_result["data"]
+                        parsed_data = {}
+                        
+                        if hasattr(data, "json_dict") and data.json_dict:
+                            parsed_data = data.json_dict
+                        elif hasattr(data, "raw"):
+                            import json
+                            try:
+                                parsed_data = json.loads(data.raw)
+                            except Exception:
+                                parsed_data = {}
+                        elif isinstance(data, dict):
+                            parsed_data = data
+                            
+                        if isinstance(parsed_data, dict) and parsed_data:
+                            self._aggregate_results(
+                                aggregated_data,
+                                parsed_data
+                            )
+            
+            logger.info(f"✓ PDF processing complete: {len(image_paths)} pages")
+            
+            return {
+                "success": True,
+                "results": results,
+                "summary": aggregated_data,
+            }
         
         except PDFProcessingError as e:
             error_msg = f"PDF processing failed: {str(e)}"
@@ -367,6 +387,7 @@ class MedicalETLPipeline:
             return {
                 "success": False,
                 "error": error_msg,
+                "results": results,
             }
         
         except Exception as e:
@@ -376,6 +397,7 @@ class MedicalETLPipeline:
             return {
                 "success": False,
                 "error": error_msg,
+                "results": results,
             }
     
     @staticmethod

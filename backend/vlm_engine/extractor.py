@@ -189,20 +189,20 @@ class QwenVLMExtractor:
             logger.error(error_msg, exc_info=True)
             raise VLMInferenceError(error_msg) from e
     
-    def extract_from_images(
+    def extract_from_image(
         self,
-        image_paths: list[str],
+        image_path: str,
         custom_prompt: Optional[str] = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.0,
+        max_tokens: int = 2048,
+        temperature: float = 0.2,
     ) -> str:
         """
-        Extract medical data from multiple images in chronological order using VLM inference.
+        Extract medical data from an image using VLM inference.
         
         Args:
-            image_paths: List of paths to image files (JPEG, PNG, etc.).
+            image_path: Path to image file (JPEG, PNG, etc.).
             custom_prompt: Override default extraction prompt.
-            max_tokens: Maximum tokens in generation (default: 4096).
+            max_tokens: Maximum tokens in generation (default: 2048).
             temperature: Sampling temperature for generation (default: 0.2, deterministic).
             
         Returns:
@@ -214,51 +214,53 @@ class QwenVLMExtractor:
             
         Example:
             >>> extractor = QwenVLMExtractor()
-            >>> result = extractor.extract_from_images(["page_1.jpg", "page_2.jpg"])
+            >>> result = extractor.extract_from_image("page_0001.jpg")
             >>> data = json.loads(result)
         """
-
+        image_path = Path(image_path)
+        
+        # Validate image file
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+        
         valid_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'}
-        processed_images = []
+        if image_path.suffix.lower() not in valid_formats:
+            raise VLMInferenceError(
+                f"Unsupported image format: {image_path.suffix}. "
+                f"Supported: {valid_formats}"
+            )
         
         try:
-            logger.info(f"Extracting data from {len(image_paths)} images")
+            logger.info(f"Extracting data from image: {image_path}")
             
-            for path_str in image_paths:
-                img_path = Path(path_str)
-                if not img_path.exists():
-                    raise FileNotFoundError(f"Image not found: {img_path}")
+            # Load and validate image
+            image = Image.open(image_path)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
                 
-                if img_path.suffix.lower() not in valid_formats:
-                    raise VLMInferenceError(f"Unsupported image format: {img_path.suffix}")
+            # Prevent OOM by capping maximum resolution
+            max_size = 1536
+            if max(image.size) > max_size:
+                ratio = max_size / max(image.size)
+                new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
+                # Fallback for different Pillow versions
+                resample_filter = getattr(Image, "Resampling", Image).LANCZOS
+                image = image.resize(new_size, resample_filter)
+                logger.info(f"Resized image to {image.size} to prevent OOM")
                 
-                image = Image.open(img_path)
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                    
-                # Prevent OOM by capping maximum resolution per image
-                max_size = 1536
-                if max(image.size) > max_size:
-                    ratio = max_size / max(image.size)
-                    new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
-                    resample_filter = getattr(Image, "Resampling", Image).LANCZOS
-                    image = image.resize(new_size, resample_filter)
-                    
-                processed_images.append(image)
-            
-            logger.debug(f"Loaded {len(processed_images)} images.")
+            logger.debug(f"Image loaded: {image.size}, mode: {image.mode}")
             
             # Use custom prompt or default
             prompt = custom_prompt or self.EXTRACTION_PROMPT
             
             # Prepare inputs for model
-            content = [{"type": "image", "image": img} for img in processed_images]
-            content.append({"type": "text", "text": prompt})
-            
             messages = [
                 {
                     "role": "user",
-                    "content": content,
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": prompt},
+                    ],
                 }
             ]
             
@@ -271,7 +273,7 @@ class QwenVLMExtractor:
             
             inputs = self.processor(
                 text=[text],
-                images=processed_images,
+                images=[image],
                 return_tensors="pt",
                 padding=True,
             ).to(self.device)
@@ -279,18 +281,13 @@ class QwenVLMExtractor:
             logger.debug(f"Inputs prepared: {inputs.input_ids.shape}")
             
             # Inference with generation parameters
-            gen_kwargs = {
-                "max_new_tokens": max_tokens,
-                "do_sample": False if temperature == 0 else True,
-            }
-            if gen_kwargs["do_sample"]:
-                gen_kwargs["temperature"] = temperature
-                gen_kwargs["top_p"] = 0.95
-                
             with torch.no_grad():
                 output_ids = self.model.generate(
                     **inputs,
-                    **gen_kwargs
+                    max_new_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=0.95,
+                    do_sample=False if temperature == 0 else True,
                 )
             
             # Decode output
@@ -308,24 +305,24 @@ class QwenVLMExtractor:
         except Exception as e:
             if isinstance(e, (FileNotFoundError, VLMInferenceError)):
                 raise
-            error_msg = f"Inference failed for images: {str(e)}"
+            error_msg = f"Inference failed for {image_path}: {str(e)}"
             logger.error(error_msg, exc_info=True)
             raise VLMInferenceError(error_msg) from e
     
     def extract_json(
         self,
-        image_paths: list[str],
+        image_path: str,
         custom_prompt: Optional[str] = None,
-        max_tokens: int = 4096,
+        max_tokens: int = 2048,
     ) -> Dict[str, Any]:
         """
-        Extract and parse JSON from multi-image inference output.
+        Extract and parse JSON from image inference output.
         
         Attempts to extract valid JSON from VLM output, handling common
         formatting issues (trailing text, invalid syntax).
         
         Args:
-            image_paths: List of paths to image files.
+            image_path: Path to image file.
             custom_prompt: Override default extraction prompt.
             max_tokens: Maximum tokens in generation.
             
@@ -337,12 +334,12 @@ class QwenVLMExtractor:
             
         Example:
             >>> extractor = QwenVLMExtractor()
-            >>> data = extractor.extract_json(["page_1.jpg", "page_2.jpg"])
+            >>> data = extractor.extract_json("page_0001.jpg")
             >>> print(data["patient_details"]["name"])
         """
         try:
-            raw_output = self.extract_from_images(
-                image_paths,
+            raw_output = self.extract_from_image(
+                image_path,
                 custom_prompt=custom_prompt,
                 max_tokens=max_tokens,
             )
@@ -433,7 +430,7 @@ if __name__ == "__main__":
     
     try:
         extractor = QwenVLMExtractor()
-        result = extractor.extract_json(sys.argv[1:])
+        result = extractor.extract_json(sys.argv[1])
         print(json.dumps(result, indent=2))
     except Exception as e:
         print(f"✗ Error: {e}")

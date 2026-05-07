@@ -13,39 +13,42 @@ from backend.database.models import MedicalRecord
 from datetime import datetime
 
 
-def vlm_api_client(image_paths: list[str]) -> str:
+def vlm_api_client(image_path: str) -> str:
     """
-    Sends medical document images to the FastAPI VLM engine and returns the extracted JSON data.
-    Input MUST be a list of absolute paths to the image files.
+    Sends a medical document image to the FastAPI VLM engine and returns the extracted JSON data.
+    Input MUST be the absolute path to the image file.
     """
     try:
-        # FastAPI backend URL
-        api_url = os.getenv("API_URL", "http://localhost:8000/extract")
+        import base64
+        # Import the prompt we already perfected
+        from backend.vlm_engine.extractor import QwenVLMExtractor
         
-        # Prepare the multipart form data
-        files_data = []
-        file_handles = []
-        
-        try:
-            for path in image_paths:
-                f = open(path, "rb")
-                file_handles.append(f)
-                filename = os.path.basename(path)
-                # Form field name 'files' must match FastAPI endpoint parameter name
-                files_data.append(("files", (filename, f, "image/jpeg")))
+        with open(image_path, "rb") as f:
+            base64_image = base64.b64encode(f.read()).decode("utf-8")
             
-            with httpx.Client(timeout=300.0) as client:
-                response = client.post(api_url, files=files_data)
-                
-                if response.status_code == 200:
-                    return json.dumps(response.json().get("data", {}))
-                else:
-                    return f"Error from VLM API: {response.text}"
-        finally:
-            # Ensure all file handles are closed
-            for f in file_handles:
-                f.close()
-                
+        payload = {
+            "model": "llama3.2-vision",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": QwenVLMExtractor.EXTRACTION_PROMPT,
+                    "images": [base64_image]
+                }
+            ],
+            "stream": False,
+            "options": {
+                "temperature": 0.1
+            }
+        }
+        
+        ollama_url = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/chat")
+        with httpx.Client(timeout=180.0) as client:
+            response = client.post(ollama_url, json=payload)
+            
+            if response.status_code == 200:
+                return response.json().get("message", {}).get("content", "")
+            else:
+                return f"Error from VLM API: {response.text}"
     except Exception as e:
         return f"Failed to call VLM API: {str(e)}"
 

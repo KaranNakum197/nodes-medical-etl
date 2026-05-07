@@ -17,7 +17,7 @@ import logging
 import json
 import tempfile
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -106,7 +106,7 @@ async def health_check():
 
 @app.post("/extract", tags=["Extraction"])
 async def extract_medical_data(
-    files: List[UploadFile] = File(..., description="Medical document images (JPEG/PNG)"),
+    file: UploadFile = File(..., description="Medical document image (JPEG/PNG)"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
@@ -151,75 +151,67 @@ async def extract_medical_data(
         )
     
     # Validate file upload
-    if not files:
+    if not file.filename:
         raise HTTPException(
             status_code=400,
-            detail="No files provided"
+            detail="No file provided"
         )
     
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'}
-    for f in files:
-        file_ext = Path(f.filename).suffix.lower()
-        if file_ext not in valid_extensions:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file format: {file_ext}. "
-                       f"Supported: {', '.join(valid_extensions)}"
-            )
+    file_ext = Path(file.filename).suffix.lower()
     
-    # Validate file size (max 50MB for safety per file)
+    if file_ext not in valid_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file format: {file_ext}. "
+                   f"Supported: {', '.join(valid_extensions)}"
+        )
+    
+    # Validate file size (max 50MB for safety)
     max_size_bytes = 50 * 1024 * 1024
     
-    temp_paths = []
+    temp_path = None
     try:
-        total_size = 0
-        filenames = []
+        # Read file into temporary location
+        contents = await file.read()
         
-        for file in files:
-            contents = await file.read()
-            
-            if len(contents) == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Uploaded file {file.filename} is empty"
-                )
-            
-            if len(contents) > max_size_bytes:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File {file.filename} too large: {len(contents)} bytes "
-                           f"(max: {max_size_bytes} bytes)"
-                )
-            
-            total_size += len(contents)
-            filenames.append(file.filename)
-            
-            # Write to temporary file for inference
-            file_ext = Path(file.filename).suffix.lower()
-            with tempfile.NamedTemporaryFile(
-                suffix=file_ext,
-                delete=False,
-                dir=tempfile.gettempdir()
-            ) as tmp:
-                tmp.write(contents)
-                temp_paths.append(tmp.name)
-            
-        logger.info(f"Processing upload: {len(files)} files, total {total_size} bytes")
+        if len(contents) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded file is empty"
+            )
+        
+        if len(contents) > max_size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large: {len(contents)} bytes "
+                       f"(max: {max_size_bytes} bytes)"
+            )
+        
+        # Write to temporary file for inference
+        with tempfile.NamedTemporaryFile(
+            suffix=file_ext,
+            delete=False,
+            dir=tempfile.gettempdir()
+        ) as tmp:
+            tmp.write(contents)
+            temp_path = tmp.name
+        
+        logger.info(f"Processing upload: {file.filename} ({len(contents)} bytes)")
         
         # Run VLM inference
         try:
-            extracted_data = vlm_extractor.extract_json(temp_paths)
+            extracted_data = vlm_extractor.extract_json(temp_path)
             
             processing_time_ms = int((time.time() - start_time) * 1000)
             
             logger.info(
-                f"✓ Extraction successful for {len(files)} files "
+                f"✓ Extraction successful: {file.filename} "
                 f"({processing_time_ms}ms)"
             )
             
             # Schedule temp file cleanup
-            for p in temp_paths:
-                background_tasks.add_task(cleanup_temp_file, p)
+            background_tasks.add_task(cleanup_temp_file, temp_path)
             
             return JSONResponse(
                 status_code=200,
@@ -227,8 +219,8 @@ async def extract_medical_data(
                     "success": True,
                     "data": extracted_data,
                     "metadata": {
-                        "filenames": filenames,
-                        "total_size_bytes": total_size,
+                        "filename": file.filename,
+                        "size_bytes": len(contents),
                         "processing_time_ms": processing_time_ms,
                     }
                 }
@@ -236,8 +228,7 @@ async def extract_medical_data(
         
         except VLMInferenceError as e:
             logger.error(f"VLM inference failed: {e}")
-            for p in temp_paths:
-                background_tasks.add_task(cleanup_temp_file, p)
+            background_tasks.add_task(cleanup_temp_file, temp_path)
             
             raise HTTPException(
                 status_code=500,
@@ -246,8 +237,7 @@ async def extract_medical_data(
         
         except json.JSONDecodeError as e:
             logger.error(f"JSON parsing failed: {e}")
-            for p in temp_paths:
-                background_tasks.add_task(cleanup_temp_file, p)
+            background_tasks.add_task(cleanup_temp_file, temp_path)
             
             raise HTTPException(
                 status_code=500,
@@ -256,8 +246,7 @@ async def extract_medical_data(
         
         except Exception as e:
             logger.error(f"Unexpected error: {e}", exc_info=True)
-            for p in temp_paths:
-                background_tasks.add_task(cleanup_temp_file, p)
+            background_tasks.add_task(cleanup_temp_file, temp_path)
             
             raise HTTPException(
                 status_code=500,
@@ -266,14 +255,14 @@ async def extract_medical_data(
     
     except HTTPException:
         # Re-raise HTTP exceptions
-        for p in temp_paths:
-            background_tasks.add_task(cleanup_temp_file, p)
+        if temp_path:
+            background_tasks.add_task(cleanup_temp_file, temp_path)
         raise
     
     except Exception as e:
         logger.error(f"Unexpected top-level error: {e}", exc_info=True)
-        for p in temp_paths:
-            background_tasks.add_task(cleanup_temp_file, p)
+        if temp_path:
+            background_tasks.add_task(cleanup_temp_file, temp_path)
         
         raise HTTPException(
             status_code=500,
@@ -292,7 +281,7 @@ async def root():
         "docs": "/docs",
         "health": "/health",
         "endpoints": {
-            "extract": "POST /extract (multipart/form-data with 'files')"
+            "extract": "POST /extract (multipart/form-data with 'file')"
         }
     }
 
