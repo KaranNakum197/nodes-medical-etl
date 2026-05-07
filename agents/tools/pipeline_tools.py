@@ -51,7 +51,19 @@ def postgres_insert_tool(validated_json_str: str = None, **kwargs) -> str:
             validated_json_str = json.dumps(kwargs)
 
     try:
-        data = json.loads(validated_json_str)
+        if validated_json_str:
+            # Strip markdown formatting
+            clean_str = validated_json_str.strip()
+            if clean_str.startswith('```json'):
+                clean_str = clean_str[7:]
+            elif clean_str.startswith('```'):
+                clean_str = clean_str[3:]
+            if clean_str.endswith('```'):
+                clean_str = clean_str[:-3]
+            clean_str = clean_str.strip()
+            data = json.loads(clean_str)
+        else:
+            data = {}
         
         patient_name = data.get("patient_details", {}).get("name")
         
